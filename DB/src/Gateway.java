@@ -5,7 +5,9 @@ import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
-import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.Set;
 import java.util.Vector;
 
 //access to SQLite database
@@ -35,6 +37,7 @@ class Gateway {
 				"Holder_ID INT, " +
 				"Price INT, "+
 				"Product_type VARCHAR(255), "+
+				"Quantity, "+
 				"Rating INT ) ";
 		
 		
@@ -60,8 +63,8 @@ class Gateway {
 		stmt.executeUpdate(comm);
 	}
 	//adds a product
-	static void addProduct(String brand_name, int holder_id, int price, String product_type, int rating) throws SQLException {
-		String comm="INSERT INTO PRODUCT (Brand_name, Holder_ID, Price, Product_type, Rating) VALUES ('"+brand_name+"', "+holder_id+", "+price+", '"+product_type+"', "+rating+")";
+	static void addProduct(String brand_name, int holder_id, int price, String product_type, int quantity, int rating) throws SQLException {
+		String comm="INSERT INTO PRODUCT (Brand_name, Holder_ID, Price, Product_type, Quantity, Rating) VALUES ('"+brand_name+"', "+holder_id+", "+price+", '"+product_type+"', "+quantity+", "+rating+")";
 		stmt.executeUpdate(comm);
 	}
 	//adds a customer
@@ -69,36 +72,7 @@ class Gateway {
 		String comm="INSERT INTO CUSTOMER VALUES ("+customer_id+", "+budget+")";
 		stmt.executeUpdate(comm);
 	}
-	//raises or lowers a company's profit
-	static void updateCompanyProfit(int id, int amount, int profit) throws SQLException{
-		int sum=amount+profit;
-		String comm="UPDATE COMPANY SET Profit="+sum+" WHERE Company_ID="+id;
-		stmt.executeUpdate(comm);
-	}
-	//raises or lowers a product's price
-	static void updateProductPrice(int id, int percent_slash) throws SQLException{
-		ResultSet results=stmt.executeQuery("SELECT Price FROM PRODUCT WHERE Holder_ID="+id);
-		
-		results.next();
-		int price=results.getInt(1);
-		
-		int new_price=price/percent_slash;
-		String comm="UPDATE PRODUCT SET Price="+new_price+" WHERE Holder_ID="+id;
-		stmt.executeUpdate(comm);
-	}
-	//raises or lowers a company's profit
-	static void updateCustomerBudget(int id, int amount, int budget) throws SQLException{
-		
-		int difference=budget-amount;
-		
-		if(difference>=0){
-			String comm="UPDATE CUSTOMER SET Budget="+difference+" WHERE Customer_ID="+id;
-			stmt.executeUpdate(comm);
-		}
-		else{
-			System.out.println("Budget can't be set any lower.");
-		}
-	}
+	
 	//selects all companies
 	static Vector<Vector<Object>> selectCompanies() throws SQLException{
 		Vector<Vector<Object>> companies=new Vector<Vector<Object>>();
@@ -121,13 +95,15 @@ class Gateway {
 		return companies;
 	}
 	//selects all products of a product type
-	static Vector<Vector<Vector<Object>>> selectProducts(Vector<String> product_types) throws SQLException{
+	static Vector<Vector<Vector<Object>>> selectProducts(Set<String> product_types) throws SQLException{
 		Vector<Vector<Vector<Object>>> products=new Vector<Vector<Vector<Object>>>();
 		
-		for(int i=0;i<product_types.size();++i){
-			ResultSet product_results=(stmt.executeQuery("SELECT * FROM PRODUCT WHERE Product_type='"+product_types.get(i)+"'"));
+		int i=0;
+		for(Iterator<String> it=product_types.iterator(); it.hasNext();){
+			ResultSet product_results=(stmt.executeQuery("SELECT * FROM PRODUCT WHERE Product_type='"+it.next()+"'"));
 			products.add(new Vector<Vector<Object>>());
 
+			
 			while(product_results.next()){
 				//products.get(i).add(new Vector<Object>());
 				Vector<Object> attributes=new Vector<Object>();
@@ -135,16 +111,20 @@ class Gateway {
 				int product_id=product_results.getInt("Holder_ID");
 				int price=product_results.getInt("Price");
 				String product_type=product_results.getString("Product_type");
+				int quantity=product_results.getInt("Quantity");
 				int rating=product_results.getInt("Rating");
 				
 				attributes.add(brand_name);
 				attributes.add(product_id);
 				attributes.add(price);
 				attributes.add(product_type);
+				attributes.add(quantity);
 				attributes.add(rating);
 				
 				products.get(i).add(attributes);
+				
 			}
+			++i;
 			product_results.close();
 		}
 		return products;
@@ -167,5 +147,54 @@ class Gateway {
 		}
 		customer_results.close();
 		return customers;
+	}
+	
+	public static void selectPrint(String input) throws SQLException{
+		ResultSet results=stmt.executeQuery(input);
+		while(results.next()){
+			System.out.println(results.getString(1));
+		}
+	}
+	
+	public static Set<String> getProductTypes() throws SQLException{
+		ResultSet results=stmt.executeQuery("SELECT Product_type FROM PRODUCT");
+		Set<String> set = new HashSet<String>();
+		while(results.next()){
+			set.add(results.getString(1));
+		}
+		results.close();
+		return set;
+	}
+	
+	//updates profit for each company per shopping periods
+	public static void updateCustomerBudget(Vector<Vector<Object>> customers) throws SQLException {
+		String comm;
+		int new_budget=0;
+		for(int i=0;i<customers.size();++i){
+			new_budget=(int) customers.get(i).get(1);
+			comm="UPDATE CUSTOMER SET Budget="+new_budget+" WHERE Customer_ID="+customers.get(i).get(0);
+			stmt.executeUpdate(comm);
+		}
+	}
+	
+	//updates profit for each company per shopping periods
+	public static void updateCompanyProfit(Vector<Vector<Object>> companies) throws SQLException {
+		String comm;
+		for(int i=0;i<companies.size();++i){
+			comm="UPDATE COMPANY SET Profit="+companies.get(i).get(2)+" WHERE Company_ID="+companies.get(i).get(1);
+			stmt.executeUpdate(comm);
+		}
+	}
+	//updates the stock of a product
+	public static void updateProductStock(String brand_name) throws SQLException {
+		ResultSet results=stmt.executeQuery("SELECT Quantity FROM PRODUCT WHERE Brand_name='"+brand_name+"'");
+		int cur_quantity=0;
+		while(results.next()){
+			cur_quantity=results.getInt(1);
+		}
+		results.close();
+		cur_quantity--;
+		String comm="UPDATE PRODUCT SET Quantity="+cur_quantity+" WHERE Brand_name='"+brand_name+"'";
+		stmt.executeUpdate(comm);
 	}
 }
